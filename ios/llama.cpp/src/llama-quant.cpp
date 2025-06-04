@@ -10,7 +10,6 @@
 #include <cinttypes>
 #include <fstream>
 #include <mutex>
-#include <regex>
 #include <thread>
 #include <unordered_map>
 
@@ -48,14 +47,8 @@ struct quantize_state_impl {
         {}
 };
 
-// changes to this struct must be replicated in quantize.cpp
-struct tensor_quantization {
-    std::string name;
-    ggml_type quant = GGML_TYPE_COUNT;
-};
-
 static void llama_tensor_dequantize_impl(
-    ggml_tensor * tensor, std::vector<no_init<float>> & output, std::vector<std::thread> & workers,
+    struct ggml_tensor * tensor, std::vector<no_init<float>> & output, std::vector<std::thread> & workers,
     const size_t nelements, const int nthread
 ) {
     if (output.size() < nelements) {
@@ -543,7 +536,7 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
     model.load_hparams(ml);
     model.load_stats  (ml);
 
-    quantize_state_impl qs(model, params);
+    struct quantize_state_impl qs(model, params);
 
     if (params->only_copy) {
         ftype = ml.ftype;
@@ -668,7 +661,7 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
     // populate the original tensors so we get an initial meta data
     for (const auto * it : tensors) {
         uint16_t i_split = params->keep_split ? it->idx : 0;
-        ggml_tensor * tensor = it->tensor;
+        struct ggml_tensor * tensor = it->tensor;
         if (!ctx_outs[i_split]) {
             ctx_outs[i_split].reset(gguf_init_empty());
         }
@@ -717,7 +710,7 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
     new_ofstream(0);
     for (const auto * it : tensors) {
         const auto & weight = *it;
-        ggml_tensor * tensor = weight.tensor;
+        struct ggml_tensor * tensor = weight.tensor;
         if (weight.idx != cur_split && params->keep_split) {
             close_ofstream();
             new_ofstream(weight.idx);
@@ -783,7 +776,7 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
         // do not quantize relative position bias (T5)
         quantize &= name.find("attn_rel_b.weight") == std::string::npos;
 
-        ggml_type new_type;
+        enum ggml_type new_type;
         void * new_data;
         size_t new_size;
 
@@ -793,19 +786,6 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
             // get more optimal quantization type based on the tensor shape, layer, etc.
             if (!params->pure && ggml_is_quantized(default_type)) {
                 new_type = llama_tensor_get_type(qs, new_type, tensor, ftype);
-                // unless the user specifies a type
-                if (params->tensor_types) {
-                    const std::vector<tensor_quantization> & tensor_types = *static_cast<const std::vector<tensor_quantization> *>(params->tensor_types);
-                    for (const auto & [tname, qtype] : tensor_types) {
-                        if (std::regex pattern(tname); std::regex_search(tensor->name, pattern)) {
-                            if (qtype != new_type) {
-                                LLAMA_LOG_DEBUG("(overriding %s -> %s), ", ggml_type_name(new_type), ggml_type_name(qtype));
-                            }
-                            new_type = qtype;
-                            break;
-                        }
-                    }
-                }
             }
             if (params->token_embedding_type < GGML_TYPE_COUNT && strcmp(tensor->name, "token_embd.weight") == 0) {
                 new_type = params->token_embedding_type;
@@ -930,8 +910,8 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
 // interface implementation
 //
 
-llama_model_quantize_params llama_model_quantize_default_params() {
-    llama_model_quantize_params result = {
+struct llama_model_quantize_params llama_model_quantize_default_params() {
+    struct llama_model_quantize_params result = {
         /*.nthread                     =*/ 0,
         /*.ftype                       =*/ LLAMA_FTYPE_MOSTLY_Q5_1,
         /*.output_tensor_type          =*/ GGML_TYPE_COUNT,
@@ -943,7 +923,6 @@ llama_model_quantize_params llama_model_quantize_default_params() {
         /*.keep_split                  =*/ false,
         /*.imatrix                     =*/ nullptr,
         /*.kv_overrides                =*/ nullptr,
-        /*.tensor_type                 =*/ nullptr,
     };
 
     return result;

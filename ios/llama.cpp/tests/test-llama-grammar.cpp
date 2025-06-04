@@ -3,8 +3,7 @@
 #endif
 
 #include "llama.h"
-
-#include "../src/llama-grammar.h"
+#include "llama-grammar.h"
 
 #include <cassert>
 #include <stdexcept>
